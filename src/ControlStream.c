@@ -1701,6 +1701,29 @@ int sendInputPacketOnControlStream(unsigned char* data, int length, uint8_t chan
     return 0;
 }
 
+// Sunshine Foundation extension. The host consumes this on the ENet control
+// stream as IDX_DYNAMIC_BITRATE_CHANGE (0x5506), not as an NVHTTP request.
+int LiSendDynamicBitrate(uint32_t bitrateKbps) {
+    // Sunshine Foundation dynamic parameter payload:
+    // int param_type (2 = BITRATE), then int value in Kbps.
+    uint32_t payload[2] = { LE32(2), LE32(bitrateKbps) };
+
+    if (!IS_SUNSHINE() || AppVersionQuad[0] < 5) {
+        return LI_ERR_UNSUPPORTED;
+    }
+
+    if (sendMessageAndForget(0x5506,
+                             sizeof(payload),
+                             payload,
+                             CTRL_CHANNEL_GENERIC,
+                             ENET_PACKET_FLAG_RELIABLE,
+                             false) == 0) {
+        return -1;
+    }
+
+    return 0;
+}
+
 // Called by the input stream to flush queued packets before a batching wait
 void flushInputOnControlStream(void) {
     if (AppVersionQuad[0] >= 5) {

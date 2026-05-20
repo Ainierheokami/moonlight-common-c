@@ -828,6 +828,10 @@ int LiSendControllerMotionEvent(uint8_t controllerNumber, uint8_t motionType, fl
 #define LI_BATTERY_PERCENTAGE_UNKNOWN 0xFF
 int LiSendControllerBatteryEvent(uint8_t controllerNumber, uint8_t batteryState, uint8_t batteryPercentage);
 
+// This function requests a live bitrate change from Sunshine Foundation over
+// the existing ENet control stream. bitrateKbps is in kilobits per second.
+int LiSendDynamicBitrate(uint32_t bitrateKbps);
+
 // This function queues a vertical scroll event to the remote server.
 // The number of "clicks" is multiplied by WHEEL_DELTA (120) before
 // being sent to the PC.
