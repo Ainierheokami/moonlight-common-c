@@ -483,6 +483,11 @@ typedef void(*ConnListenerSetAdaptiveTriggers)(uint16_t controllerNumber, uint8_
 // This callback is invoked to set a controller's RGB LED (if present).
 typedef void(*ConnListenerSetControllerLED)(uint16_t controllerNumber, uint8_t r, uint8_t g, uint8_t b);
 
+// This callback is invoked when Foundation Sunshine pushes an opaque clipboard
+// payload to the client. The buffer is valid only for the duration of the call;
+// clients must copy it before returning and defer blocking/UI work to another thread.
+typedef void(*ConnListenerClipboardData)(const char* data, int length);
+
 typedef struct _CONNECTION_LISTENER_CALLBACKS {
     ConnListenerStageStarting stageStarting;
     ConnListenerStageComplete stageComplete;
@@ -497,6 +502,7 @@ typedef struct _CONNECTION_LISTENER_CALLBACKS {
     ConnListenerSetMotionEventState setMotionEventState;
     ConnListenerSetControllerLED setControllerLED;
     ConnListenerSetAdaptiveTriggers setAdaptiveTriggers;
+    ConnListenerClipboardData clipboardData;
 } CONNECTION_LISTENER_CALLBACKS, *PCONNECTION_LISTENER_CALLBACKS;
 
 // Use this function to zero the connection callbacks when allocated on the stack or heap
@@ -831,6 +837,18 @@ int LiSendControllerBatteryEvent(uint8_t controllerNumber, uint8_t batteryState,
 // This function requests a live bitrate change from Sunshine Foundation over
 // the existing ENet control stream. bitrateKbps is in kilobits per second.
 int LiSendDynamicBitrate(uint32_t bitrateKbps);
+
+// Send an opaque clipboard payload to Foundation Sunshine over the existing
+// encrypted ENet control stream (packet type 0x5508). The payload body is owned
+// by the client protocol; common-c only forwards it verbatim.
+//
+// Returns 0 on success, LI_ERR_UNSUPPORTED when the active host is not Sunshine
+// or does not expose this extension, and a negative value for invalid payloads
+// or transport errors.
+#define LI_CLIPBOARD_KIND_TEXT 1
+#define LI_CLIPBOARD_KIND_PNG  2
+#define LI_CLIPBOARD_KIND_REF  3
+int LiSendClipboardData(const void* payload, int length);
 
 // This function queues a vertical scroll event to the remote server.
 // The number of "clicks" is multiplied by WHEEL_DELTA (120) before

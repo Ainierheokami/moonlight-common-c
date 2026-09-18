@@ -140,6 +140,7 @@ static PPLT_CRYPTO_CONTEXT decryptionCtx;
 #define IDX_SET_MOTION_EVENT 10
 #define IDX_SET_RGB_LED 11
 #define IDX_DS_ADAPTIVE_TRIGGERS 12
+#define IDX_CLIPBOARD 13
 
 #define CONTROL_STREAM_TIMEOUT_SEC 10
 #define CONTROL_STREAM_LINGER_TIMEOUT_SEC 2
@@ -157,6 +158,7 @@ static const short packetTypesGen3[] = {
     -1,     // Rumble triggers (unused)
     -1,     // Set motion event (unused)
     -1,     // Set RGB LED (unused)
+    -1,     // Clipboard (unused)
 };
 static const short packetTypesGen4[] = {
     0x0606, // Request IDR frame
@@ -171,6 +173,7 @@ static const short packetTypesGen4[] = {
     -1,     // Rumble triggers (unused)
     -1,     // Set motion event (unused)
     -1,     // Set RGB LED (unused)
+    -1,     // Clipboard (unused)
 };
 static const short packetTypesGen5[] = {
     0x0305, // Start A
@@ -185,6 +188,7 @@ static const short packetTypesGen5[] = {
     -1,     // Rumble triggers (unused)
     -1,     // Set motion event (unused)
     -1,     // Set RGB LED (unused)
+    -1,     // Clipboard (unused)
 };
 static const short packetTypesGen7[] = {
     0x0305, // Start A
@@ -199,6 +203,7 @@ static const short packetTypesGen7[] = {
     -1,     // Rumble triggers (unused)
     -1,     // Set motion event (unused)
     -1,     // Set RGB LED (unused)
+    -1,     // Clipboard (unused)
 };
 static const short packetTypesGen7Enc[] = {
     0x0302, // Request IDR frame
@@ -214,6 +219,7 @@ static const short packetTypesGen7Enc[] = {
     0x5501, // Set motion event (Sunshine protocol extension)
     0x5502, // Set RGB LED (Sunshine protocol extension)
     0x5503, // Set Adaptive Triggers (Sunshine protocol extension)
+    0x5508, // Clipboard sync (Sunshine Foundation protocol extension)
 };
 
 static const char requestIdrFrameGen3[] = { 0, 0 };
@@ -234,6 +240,14 @@ static const short payloadLengthsGen3[] = {
     32, // Loss Stats
     64, // Frame Stats
     -1, // Input data
+    -1, // Rumble data
+    -1, // Termination
+    -1, // HDR mode
+    -1, // Rumble triggers
+    -1, // Set motion event
+    -1, // Set RGB LED
+    -1, // Adaptive triggers
+    -1, // Clipboard (variable-length)
 };
 static const short payloadLengthsGen4[] = {
     sizeof(requestIdrFrameGen4), // Request IDR frame
@@ -242,6 +256,14 @@ static const short payloadLengthsGen4[] = {
     32, // Loss Stats
     64, // Frame Stats
     -1, // Input data
+    -1, // Rumble data
+    -1, // Termination
+    -1, // HDR mode
+    -1, // Rumble triggers
+    -1, // Set motion event
+    -1, // Set RGB LED
+    -1, // Adaptive triggers
+    -1, // Clipboard (variable-length)
 };
 static const short payloadLengthsGen5[] = {
     sizeof(startAGen5), // Start A
@@ -250,6 +272,14 @@ static const short payloadLengthsGen5[] = {
     32, // Loss Stats
     80, // Frame Stats
     -1, // Input data
+    -1, // Rumble data
+    -1, // Termination
+    -1, // HDR mode
+    -1, // Rumble triggers
+    -1, // Set motion event
+    -1, // Set RGB LED
+    -1, // Adaptive triggers
+    -1, // Clipboard (variable-length)
 };
 static const short payloadLengthsGen7[] = {
     sizeof(startAGen5), // Start A
@@ -258,6 +288,14 @@ static const short payloadLengthsGen7[] = {
     32, // Loss Stats
     80, // Frame Stats
     -1, // Input data
+    -1, // Rumble data
+    -1, // Termination
+    -1, // HDR mode
+    -1, // Rumble triggers
+    -1, // Set motion event
+    -1, // Set RGB LED
+    -1, // Adaptive triggers
+    -1, // Clipboard (variable-length)
 };
 static const short payloadLengthsGen7Enc[] = {
     sizeof(requestIdrFrameGen7Enc), // Request IDR frame
@@ -266,27 +304,40 @@ static const short payloadLengthsGen7Enc[] = {
     32, // Loss Stats
     80, // Frame Stats
     -1, // Input data
+    -1, // Rumble data
+    -1, // Termination
+    -1, // HDR mode
+    -1, // Rumble triggers
+    -1, // Set motion event
+    -1, // Set RGB LED
+    -1, // Adaptive triggers
+    -1, // Clipboard (variable-length)
 };
 
 static const char* preconstructedPayloadsGen3[] = {
     requestIdrFrameGen3,
-    (char*)startBGen3
+    (char*)startBGen3,
+    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 };
 static const char* preconstructedPayloadsGen4[] = {
     requestIdrFrameGen4,
-    startBGen4
+    startBGen4,
+    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 };
 static const char* preconstructedPayloadsGen5[] = {
     startAGen5,
-    startBGen5
+    startBGen5,
+    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 };
 static const char* preconstructedPayloadsGen7[] = {
     startAGen5,
-    startBGen5
+    startBGen5,
+    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 };
 static const char* preconstructedPayloadsGen7Enc[] = {
     requestIdrFrameGen7Enc,
-    startBGen5
+    startBGen5,
+    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 };
 
 static short* packetTypes;
@@ -703,12 +754,26 @@ static bool sendMessageEnet(short ptype, short paylen, const void* payload, uint
     if (encryptedControlStream) {
         PNVCTL_ENCRYPTED_PACKET_HEADER encPacket;
         PNVCTL_ENET_PACKET_HEADER_V2 packet;
-        char tempBuffer[256];
+        char tempBufferStack[256];
+        char* tempBuffer = tempBufferStack;
+        size_t plaintextLen = sizeof(*packet) + (size_t)(uint16_t)paylen;
+
+        // Most control messages are tiny; clipboard frames may be close to the
+        // 16-bit ENet payload limit, so use the heap when the stack buffer is too small.
+        if (plaintextLen > sizeof(tempBufferStack)) {
+            tempBuffer = (char*)malloc(plaintextLen);
+            if (tempBuffer == NULL) {
+                return false;
+            }
+        }
 
         enetPacket = enet_packet_create(NULL,
-                                        sizeof(*encPacket) + AES_GCM_TAG_LENGTH + sizeof(*packet) + paylen,
+                                        sizeof(*encPacket) + AES_GCM_TAG_LENGTH + plaintextLen,
                                         flags);
         if (enetPacket == NULL) {
+            if (tempBuffer != tempBufferStack) {
+                free(tempBuffer);
+            }
             return false;
         }
 
@@ -718,18 +783,23 @@ static bool sendMessageEnet(short ptype, short paylen, const void* payload, uint
 
         encPacket = (PNVCTL_ENCRYPTED_PACKET_HEADER)enetPacket->data;
         encPacket->encryptedHeaderType = 0x0001;
-        encPacket->length = sizeof(encPacket->seq) + AES_GCM_TAG_LENGTH + sizeof(*packet) + paylen;
+        encPacket->length = sizeof(encPacket->seq) + AES_GCM_TAG_LENGTH + plaintextLen;
         encPacket->seq = currentEnetSequenceNumber++;
 
         // Construct the plaintext data for encryption
-        LC_ASSERT(sizeof(*packet) + paylen < sizeof(tempBuffer));
         packet = (PNVCTL_ENET_PACKET_HEADER_V2)tempBuffer;
         packet->type = ptype;
         packet->payloadLength = paylen;
-        memcpy(&packet[1], payload, paylen);
+        memcpy(&packet[1], payload, (uint16_t)paylen);
 
         // Encrypt the data into the final packet (and byteswap for BE machines)
-        if (!encryptControlMessage(encPacket, packet)) {
+        bool encOk = encryptControlMessage(encPacket, packet);
+
+        if (tempBuffer != tempBufferStack) {
+            free(tempBuffer);
+        }
+
+        if (!encOk) {
             Limelog("Failed to encrypt control stream message\n");
             enet_packet_destroy(enetPacket);
             PltUnlockMutex(&enetMutex);
@@ -1296,6 +1366,15 @@ static void controlReceiveThreadFunc(void* context) {
             if (needsAsyncCallback(ctlHdr->type)) {
                 queueAsyncCallback(ctlHdr, packetLength);
             }
+            else if (ctlHdr->type == packetTypes[IDX_CLIPBOARD]) {
+                // Sunshine Foundation clipboard sync (0x5508). The payload is
+                // opaque to common-c and is valid only for this callback call.
+                // The client must defer any blocking/UI work to its own thread.
+                if (ListenerCallbacks.clipboardData != NULL && packetLength > (int)sizeof(*ctlHdr)) {
+                    ListenerCallbacks.clipboardData((const char*)(ctlHdr + 1),
+                                                    packetLength - (int)sizeof(*ctlHdr));
+                }
+            }
             else if (ctlHdr->type == packetTypes[IDX_TERMINATION]) {
                 BYTE_BUFFER bb;
 
@@ -1695,6 +1774,27 @@ int sendInputPacketOnControlStream(unsigned char* data, int length, uint8_t chan
 
     // Send the input data (no reply expected)
     if (sendMessageAndForget(packetTypes[IDX_INPUT_DATA], length, data, channelId, flags, moreData) == 0) {
+        return -1;
+    }
+
+    return 0;
+}
+
+// Sunshine Foundation extension. The payload is opaque to common-c and is
+// forwarded verbatim by Foundation Sunshine to its user-session clipboard agent.
+int LiSendClipboardData(const void* payload, int length) {
+    if (payload == NULL || length <= 0 || length > 65535) {
+        return -1;
+    }
+
+    // This packet type is only defined for Sunshine's encrypted Gen5+ control stream.
+    if (!IS_SUNSHINE() || AppVersionQuad[0] < 5 || packetTypes == NULL ||
+            packetTypes[IDX_CLIPBOARD] == -1) {
+        return LI_ERR_UNSUPPORTED;
+    }
+
+    if (!sendMessageAndForget(packetTypes[IDX_CLIPBOARD], (short)length, payload,
+                              CTRL_CHANNEL_GENERIC, ENET_PACKET_FLAG_RELIABLE, false)) {
         return -1;
     }
 
